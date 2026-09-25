@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar — Nouveautés Spotify</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15121B; --bg-2:#1D1926; --line:#332C40;
+    --ink:#F2EEEA; --ink-dim:#9C93A8;
+    --accent1:#8B5CF6; --accent2:#F97364;
+    --ok:#6FCF97; --err:#E8746B;
+    font-family:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink); min-height:100vh; padding:32px 20px 80px; line-height:1.5}
+  #app{max-width:640px; margin:0 auto}
+  h1{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.6rem; margin:0 0 4px; letter-spacing:-0.01em;
+    background:linear-gradient(100deg,var(--accent1),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .sub{color:var(--ink-dim); font-size:0.92rem; margin:0 0 32px}
+  section{border:1px solid var(--line); border-radius:10px; background:var(--bg-2); padding:22px 22px 24px; margin-bottom:18px}
+  section h2{font-family:'Space Grotesk',sans-serif; font-size:1.02rem; font-weight:600; margin:0 0 14px}
+  label{display:block; font-size:0.85rem; color:var(--ink-dim); margin:14px 0 6px}
+  label:first-of-type{margin-top:0}
+  input[type=text]{width:100%; background:#0F0D14; border:1px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:0.92rem; font-family:'Inter',sans-serif}
+  input[type=text]:focus{outline:none; border-color:var(--accent1)}
+  .row{display:flex; gap:8px; align-items:center}
+  .row input{flex:1}
+  button{font-family:'Inter',sans-serif; font-weight:600; font-size:0.9rem; border-radius:7px; padding:10px 16px; border:1px solid transparent; cursor:pointer; transition:opacity .15s}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  button:hover:not(:disabled){opacity:.88}
+  .primary{background:linear-gradient(100deg,var(--accent1),var(--accent2)); color:#fff}
+  .ghost{background:transparent; border-color:var(--line); color:var(--ink)}
+  .small{padding:6px 11px; font-size:0.78rem}
+  .hint{color:var(--ink-dim); font-size:0.8rem; margin-top:6px}
+  .hidden{display:none !important}
+  .status-pill{display:inline-block; font-size:0.78rem; padding:3px 10px; border-radius:20px; border:1px solid var(--line); color:var(--ink-dim)}
+  .status-pill.connected{color:var(--ok); border-color:var(--ok)}
+  #progressWrap{margin-top:16px}
+  #progressBar{height:6px; background:#0F0D14; border-radius:4px; overflow:hidden; border:1px solid var(--line)}
+  #progressFill{height:100%; width:0%; background:linear-gradient(100deg,var(--accent1),var(--accent2)); transition:width .2s}
+  #progressLabel{font-size:0.8rem; color:var(--ink-dim); margin-top:6px}
+  #summary{display:flex; gap:18px; margin-top:14px; flex-wrap:wrap}
+  #summary div{font-size:0.82rem; color:var(--ink-dim)}
+  #summary b{display:block; font-family:'Space Grotesk',sans-serif; font-size:1.3rem; color:var(--ink); font-weight:600}
+  #log{background:#0F0D14; border:1px solid var(--line); border-radius:7px; padding:10px 12px; font-size:0.78rem; color:var(--ink-dim); max-height:260px; overflow-y:auto; white-space:pre-wrap; margin-top:14px; font-family:ui-monospace,monospace; line-height:1.6}
+  #log .new{color:var(--ok)}
+  #log .error{color:var(--err)}
+  .checkline{display:flex; align-items:center; gap:8px; font-size:0.85rem; margin-top:14px; color:var(--ink-dim)}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Radar Nouveautés</h1>
+  <p class="sub">Scanne les artistes que tu suis sur Spotify et ajoute automatiquement leurs nouveaux titres et albums dans une playlist. Fonctionne avec un compte gratuit.</p>
+
+  <section id="setupSection">
+    <h2>1 · Connexion à ton compte Spotify</h2>
+    <label>Client ID (créé sur developer.spotify.com/dashboard)</label>
+    <input type="text" id="clientId" placeholder="ex: a1b2c3d4e5f6...">
+    <label>Redirect URI à coller dans les paramètres de l'app Spotify</label>
+    <div class="row">
+      <input type="text" id="redirectUri" readonly>
+      <button class="ghost small" id="copyRedirect">Copier</button>
+    </div>
+    <p class="hint">Doit correspondre EXACTEMENT à ce que tu mets dans "Redirect URIs" sur le dashboard Spotify.</p>
+    <div style="margin-top:18px">
+      <button class="primary" id="connectBtn">Se connecter à Spotify</button>
+      <span class="status-pill" id="connStatus">non connecté</span>
+    </div>
+  </section>
+
+  <section id="mainSection">
+    <h2>2 · Playlist cible</h2>
+    <label>ID ou lien de playlist existante (laisser vide pour en créer une automatiquement)</label>
+    <input type="text" id="playlistId" placeholder="ex: https://open.spotify.com/playlist/xxxxxxxx">
+    <div class="checkline">
+      <input type="checkbox" id="testMode">
+      <label style="margin:0" for="testMode">Mode test — ne vérifier que les 20 premiers artistes</label>
+    </div>
+    <div style="margin-top:18px">
+      <button class="primary" id="runBtn" disabled>Vérifier les nouveautés</button>
+      <button class="ghost" id="resetSeen">Réinitialiser l'historique</button>
+    </div>
+    <div id="progressWrap" class="hidden">
+      <div id="progressBar"><div id="progressFill"></div></div>
+      <div id="progressLabel"></div>
+    </div>
+    <div id="summary" class="hidden">
+      <div><b id="sumChecked">0</b>vérifiés</div>
+      <div><b id="sumNew">0</b>nouveautés</div>
+      <div><b id="sumErr">0</b>erreurs</div>
+    </div>
+    <div id="log"></div>
+  </section>
+</div>
+
+<script>
+const API = 'https://api.spotify.com/v1';
+const CFG_KEY = 'radarSpotify_config';
+const SEEN_KEY = 'radarSpotify_seen';
+
+function loadCfg(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }catch(e){ return {}; } }
+function saveCfg(cfg){ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+function loadSeen(){ try{ return JSON.parse(localStorage.getItem(SEEN_KEY)) || {}; }catch(e){ return {}; } }
+function saveSeen(seen){ localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); }
+
+const logEl = document.getElementById('log');
+function log(msg, cls){
+  const line = document.createElement('div');
+  if(cls) line.className = cls;
+  line.textContent = `[${new Date().toLocaleTimeString('fr-FR')}] ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- PKCE HELPERS ---------- */
+function randomString(len){
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  for(let i=0;i<len;i++) out += chars[arr[i] % chars.length];
+  return out;
+}
+async function sha256base64url(str){
+  const data = new TextEncoder().encode(str);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  let b64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+  return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+/* ---------- OAUTH ---------- */
+const REDIRECT_URI = location.origin + location.pathname;
+document.getElementById('redirectUri').value = REDIRECT_URI;
+document.getElementById('copyRedirect').onclick = () => {
+  navigator.clipboard.writeText(REDIRECT_URI).then(()=>log('Redirect URI copiée.'));
+};
+
+const clientIdEl = document.getElementById('clientId');
+{
+  const cfg = loadCfg();
+  if(cfg.clientId) clientIdEl.value = cfg.clientId;
+  if(cfg.playlistId) document.getElementById('playlistId').value = cfg.playlistId;
+}
+clientIdEl.addEventListener('change', () => {
+  const cfg = loadCfg(); cfg.clientId = clientIdEl.value.trim(); saveCfg(cfg);
+});
+
+document.getElementById('connectBtn').onclick = async () => {
+  const cfg = loadCfg();
+  cfg.clientId = clientIdEl.value.trim();
+  saveCfg(cfg);
+  if(!cfg.clientId){ log('Renseigne d\'abord ton Client ID.', 'error'); return; }
+
+  const verifier = randomString(64);
+  const challenge = await sha256base64url(verifier);
+  sessionStorage.setItem('pkce_verifier', verifier);
+
+  const scope = 'user-follow-read playlist-modify-private playlist-modify-public';
+  const params = new URLSearchParams({
+    client_id: cfg.clientId,
+    response_type: 'code',
+    redirect_uri: REDIRECT_URI,
+    code_challenge_method: 'S256',
+    code_challenge: challenge,
+    scope
+  });
+  location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+};
+
+function updateConnStatus(){
+  const cfg = loadCfg();
+  const pill = document.getElementById('connStatus');
+  const ok = !!cfg.accessToken;
+  pill.textContent = ok ? 'connecté ✓' : 'non connecté';
+  pill.classList.toggle('connected', ok);
+  document.getElementById('runBtn').disabled = !ok;
+}
+
+async function exchangeCodeForToken(code){
+  const cfg = loadCfg();
+  const verifier = sessionStorage.getItem('pkce_verifier');
+  const body = new URLSearchParams({
+    client_id: cfg.clientId,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: REDIRECT_URI,
+    code_verifier: verifier
+  });
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+  const data = await res.json();
+  if(data.access_token){
+    cfg.accessToken = data.access_token;
+    cfg.refreshToken = data.refresh_token;
+    cfg.expiresAt = Date.now() + (data.expires_in * 1000);
+    saveCfg(cfg);
+    log('Connexion réussie.');
+  } else {
+    log('Échec de connexion : ' + JSON.stringify(data), 'error');
+  }
+}
+
+async function refreshTokenIfNeeded(){
+  const cfg = loadCfg();
+  if(!cfg.accessToken) return null;
+  if(cfg.expiresAt && Date.now() < cfg.expiresAt - 60000) return cfg.accessToken;
+  if(!cfg.refreshToken) return cfg.accessToken;
+  const body = new URLSearchParams({
+    client_id: cfg.clientId,
+    grant_type: 'refresh_token',
+    refresh_token: cfg.refreshToken
+  });
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+  const data = await res.json();
+  if(data.access_token){
+    cfg.accessToken = data.access_token;
+    if(data.refresh_token) cfg.refreshToken = data.refresh_token;
+    cfg.expiresAt = Date.now() + (data.expires_in * 1000);
+    saveCfg(cfg);
+    log('Token rafraîchi.');
+    return cfg.accessToken;
+  }
+  log('Échec du rafraîchissement du token : ' + JSON.stringify(data), 'error');
+  return cfg.accessToken;
+}
+
+async function handleOAuthReturn(){
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const err = params.get('error');
+  if(err){ log('Spotify a refusé la connexion : ' + err, 'error'); history.replaceState(null,'',REDIRECT_URI); }
+  if(code){
+    await exchangeCodeForToken(code);
+    history.replaceState(null, '', REDIRECT_URI);
+  }
+  updateConnStatus();
+}
+
+/* ---------- API HELPERS ---------- */
+async function sjson(url, opts){
+  opts = opts || {};
+  const token = await refreshTokenIfNeeded();
+  opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
+  let res = await fetch(url, opts);
+  if(res.status === 429){
+    const wait = parseInt(res.headers.get('Retry-After')||'2',10);
+    await sleep((wait+1)*1000);
+    res = await fetch(url, opts);
+  }
+  const data = await res.json().catch(()=> ({}));
+  if(data.error){ throw new Error(`Spotify: ${data.error.status||''} ${data.error.message||JSON.stringify(data.error)}`); }
+  return data;
+}
+
+async function getAllFollowedArtists(){
+  let artists = [];
+  let url = `${API}/me/following?type=artist&limit=50`;
+  while(url){
+    const data = await sjson(url);
+    const block = data.artists;
+    if(block && block.items) artists = artists.concat(block.items);
+    url = (block && block.next) || null;
+    await sleep(100);
+  }
+  return artists;
+}
+
+async function getLatestRelease(artistId){
+  const data = await sjson(`${API}/artists/${artistId}/albums?include_groups=album,single&market=from_token&limit=5`);
+  if(!data.items || !data.items.length) return null;
+  let best = data.items[0];
+  for(const a of data.items){
+    if(a.release_date && (!best.release_date || a.release_date > best.release_date)) best = a;
+  }
+  return best;
+}
+
+async function getAlbumTrackUris(albumId){
+  let uris = [];
+  let url = `${API}/albums/${albumId}/tracks?limit=50`;
+  while(url){
+    const data = await sjson(url);
+    if(data.items) uris = uris.concat(data.items.map(t => t.uri));
+    url = data.next || null;
+  }
+  return uris;
+}
+
+async function ensurePlaylist(){
+  const pField = document.getElementById('playlistId');
+  let raw = pField.value.trim();
+  if(raw){
+    const m = raw.match(/playlist[\/:]([a-zA-Z0-9]+)/) || raw.match(/^([a-zA-Z0-9]{15,})$/);
+    return m ? m[1] : raw;
+  }
+  log('Aucune playlist indiquée, création automatique...');
+  const me = await sjson(`${API}/me`);
+  const data = await sjson(`${API}/users/${me.id}/playlists`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name:'Nouveautés Auto', public:false, description:'Ajouts automatiques — Radar Nouveautés' })
+  });
+  pField.value = data.id;
+  const cfg = loadCfg(); cfg.playlistId = data.id; saveCfg(cfg);
+  log(`Playlist créée (id ${data.id}).`);
+  return data.id;
+}
+
+async function addTracksToPlaylist(playlistId, uris){
+  if(!uris.length) return;
+  for(let i=0;i<uris.length;i+=90){
+    const chunk = uris.slice(i,i+90);
+    await sjson(`${API}/playlists/${playlistId}/tracks`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ uris: chunk })
+    });
+    await sleep(120);
+  }
+}
+
+document.getElementById('playlistId').addEventListener('change', e => {
+  const cfg = loadCfg(); cfg.playlistId = e.target.value.trim(); saveCfg(cfg);
+});
+document.getElementById('resetSeen').onclick = () => {
+  if(confirm('Oublier toutes les sorties déjà vues ? Risque de doublons dans la playlist à la prochaine vérification.')){
+    localStorage.removeItem(SEEN_KEY);
+    log('Historique réinitialisé.');
+  }
+};
+
+const runBtn = document.getElementById('runBtn');
+runBtn.onclick = async () => {
+  runBtn.disabled = true;
+  document.getElementById('progressWrap').classList.remove('hidden');
+  document.getElementById('summary').classList.remove('hidden');
+  const progressFill = document.getElementById('progressFill');
+  const progressLabel = document.getElementById('progressLabel');
+  const sumChecked = document.getElementById('sumChecked');
+  const sumNew = document.getElementById('sumNew');
+  const sumErr = document.getElementById('sumErr');
+  let checked=0, added=0, errors=0;
+
+  try{
+    log('Récupération de la liste des artistes suivis...');
+    let artists = await getAllFollowedArtists();
+    log(`${artists.length} artistes suivis trouvés.`);
+    if(document.getElementById('testMode').checked) artists = artists.slice(0,20);
+
+    const playlistId = await ensurePlaylist();
+    const seen = loadSeen();
+
+    for(let i=0;i<artists.length;i++){
+      const artist = artists[i];
+      progressLabel.textContent = `${i+1} / ${artists.length} — ${artist.name}`;
+      progressFill.style.width = Math.round(((i+1)/artists.length)*100) + '%';
+      try{
+        const latest = await getLatestRelease(artist.id);
+        checked++;
+        if(latest){
+          const prev = seen[artist.id];
+          const isNew = !prev || (latest.id !== prev.albumId && (!prev.date || latest.release_date > prev.date));
+          if(isNew){
+            const uris = await getAlbumTrackUris(latest.id);
+            await addTracksToPlaylist(playlistId, uris);
+            seen[artist.id] = { albumId: latest.id, date: latest.release_date };
+            saveSeen(seen);
+            added++;
+            log(`✚ ${artist.name} — "${latest.name}" (${uris.length} titres ajoutés)`, 'new');
+          } else {
+            seen[artist.id] = { albumId: latest.id, date: latest.release_date };
+          }
+        }
+      }catch(e){
+        errors++;
+        log(`Erreur sur ${artist.name} : ${e.message}`, 'error');
+      }
+      sumChecked.textContent = checked;
+      sumNew.textContent = added;
+      sumErr.textContent = errors;
+      await sleep(120);
+    }
+    saveSeen(seen);
+    log(`Terminé. ${added} nouveauté(s) ajoutée(s), ${errors} erreur(s).`);
+  }catch(e){
+    log('Erreur générale : ' + e.message, 'error');
+  }finally{
+    runBtn.disabled = false;
+  }
+};
+
+handleOAuthReturn();
+</script>
+</body>
+</html>
